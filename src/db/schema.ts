@@ -1,13 +1,14 @@
 /**
  * Drizzle schema: documentation/DATABASE_SCHEMA.md. Pure (no `server-only`): drizzle-kit loads it.
- * Phase 2 tables, plus `documents`, `conversation_documents` and `message_citations` so that
- * account and chat deletion cascade correctly from day one. Chunks, pages, jobs and upload
- * events arrive with Phase 3 (`message_citations.chunk_id` gets its FK then).
+ * Phase 2: users, chats, messages, memory, metrics. Phase 3: the document pipeline (upload ledger,
+ * processing jobs, staging pages, chunks with halfvec embeddings + generated tsvector, citations).
  */
 import { sql } from "drizzle-orm";
 import {
   bigserial,
   boolean,
+  customType,
+  halfvec,
   index,
   integer,
   jsonb,
@@ -22,6 +23,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { PhysicsFacts } from "@/shared/memory";
+import type { ChunkEquation } from "@/shared/documents";
 import type { MessagePart } from "@/shared/ui-message";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
@@ -42,6 +44,8 @@ export const documentStatus = pgEnum("document_status", [
   "failed",
   "deleting",
 ]);
+export const jobStage = pgEnum("job_stage", ["extract", "chunk", "embed", "finalize", "done"]);
+export const chunkType = pgEnum("chunk_type", ["prose", "equation", "worked_example", "definition", "table", "summary"]);
 export const explanationLevel = pgEnum("explanation_level", ["intro", "intermediate", "advanced"]);
 export const queryType = pgEnum("query_type", [
   "concept",
@@ -159,7 +163,10 @@ export const documents = pgTable(
     pageCount: integer("page_count"),
     sha256: text("sha256"),
     status: documentStatus("status").default("reserved").notNull(),
+    /** User-safe failure message. */
     error: text("error"),
+    /** User-safe warning on a ready document (e.g. scanned pages that couldn't be read). */
+    warning: text("warning"),
     scannedPages: integer("scanned_pages").default(0).notNull(),
     parserVersion: text("parser_version").notNull(),
     embeddingModel: text("embedding_model").notNull(),
@@ -201,8 +208,7 @@ export const messageCitations = pgTable(
       .references(() => messages.id, { onDelete: "cascade" }),
     label: integer("label").notNull(),
     documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
-    /** FK to document_chunks (SET NULL) is added in Phase 3. */
-    chunkId: uuid("chunk_id"),
+    chunkId: uuid("chunk_id").references(() => documentChunks.id, { onDelete: "set null" }),
     documentTitle: text("document_title").notNull(),
     pageStart: integer("page_start").notNull(),
     pageEnd: integer("page_end").notNull(),
@@ -210,6 +216,88 @@ export const messageCitations = pgTable(
     score: real("score"),
   },
   (t) => [index("message_citations_message_idx").on(t.messageId)],
+);
+
+/** `tsvector` (no built-in Drizzle type). */
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
+
+/** Immutable upload ledger: the weekly quota counts these rows (LIMITS_AND_QUOTAS.md §2). */
+export const uploadEvents = pgTable(
+  "upload_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("upload_events_owner_created_idx").on(t.userId, t.createdAt.desc()),
+    uniqueIndex("upload_events_document_uq").on(t.documentId),
+  ],
+);
+
+/** One resumable ingestion job per document, locked by a lease. */
+export const documentProcessingJobs = pgTable("document_processing_jobs", {
+  documentId: uuid("document_id")
+    .primaryKey()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  stage: jobStage("stage").default("extract").notNull(),
+  cursor: integer("cursor").default(0).notNull(),
+  total: integer("total"),
+  attempts: integer("attempts").default(0).notNull(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  /** Internal only (never shown to users). */
+  lastError: text("last_error"),
+  updatedAt: updatedAt(),
+});
+
+/** Staging: extracted pages, purged once the document is ready. */
+export const documentPages = pgTable(
+  "document_pages",
+  {
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    pageNumber: integer("page_number").notNull(),
+    rawText: text("raw_text").notNull(),
+    normalizedText: text("normalized_text").notNull(),
+    isScanned: boolean("is_scanned").default(false).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.documentId, t.pageNumber] })],
+);
+
+export const documentChunks = pgTable(
+  "document_chunks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    /** Denormalised: every retrieval filters on it. */
+    userId: uuid("user_id").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    chunkType: chunkType("chunk_type").notNull(),
+    sectionPath: text("section_path"),
+    pageStart: integer("page_start").notNull(),
+    pageEnd: integer("page_end").notNull(),
+    /** Display text. */
+    content: text("content").notNull(),
+    /** Contextual prefix + normalised text: what is embedded and indexed. */
+    searchText: text("search_text").notNull(),
+    equations: jsonb("equations").$type<ChunkEquation[]>().default(sql`'[]'::jsonb`).notNull(),
+    tokenCount: integer("token_count").notNull(),
+    embedding: halfvec("embedding", { dimensions: 768 }),
+    tsv: tsvector("tsv").generatedAlwaysAs(sql`to_tsvector('english', search_text)`),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("chunks_doc_idx_uq").on(t.documentId, t.chunkIndex),
+    index("chunks_owner_doc_idx").on(t.userId, t.documentId),
+    index("chunks_tsv_idx").using("gin", t.tsv),
+    index("chunks_pending_embed_idx").on(t.documentId, t.chunkIndex).where(sql`${t.embedding} is null`),
+  ],
 );
 
 // ---------- Metrics ----------
@@ -237,3 +325,6 @@ export type User = typeof users.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type ConversationMemory = typeof conversationMemories.$inferSelect;
+export type DocumentRow = typeof documents.$inferSelect;
+export type JobRow = typeof documentProcessingJobs.$inferSelect;
+export type ChunkRow = typeof documentChunks.$inferSelect;

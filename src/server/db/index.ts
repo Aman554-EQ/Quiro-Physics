@@ -50,11 +50,12 @@ async function connect(): Promise<Db> {
   const dir = pgliteDir();
   if (!dir) throw new DbUnavailableError();
   const { PGlite } = await import("@electric-sql/pglite");
+  const { vector } = await import("@electric-sql/pglite-pgvector");
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
   // PGlite creates its own folder but not missing parents (e.g. ".e2e/").
   fs.mkdirSync(path.dirname(path.resolve(dir)), { recursive: true });
-  const client = serializePGlite(new PGlite(dir));
+  const client = serializePGlite(new PGlite(dir, { extensions: { vector } }));
   const db = drizzle({ client, schema });
   await migrate(db, { migrationsFolder: MIGRATIONS }); // local databases migrate themselves
   return db as unknown as Db;
