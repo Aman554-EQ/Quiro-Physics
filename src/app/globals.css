@@ -1,0 +1,488 @@
+@import "tailwindcss";
+
+/* Streamdown ships Tailwind classes in its bundle */
+@source "../../node_modules/streamdown/dist/*.js";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant reduce-motion (&:where([data-motion="reduce"], [data-motion="reduce"] *));
+
+/* ---------- Colour tokens: Dark Matter (default) ---------- */
+:root,
+[data-theme="dark"] {
+  --bg: oklch(0.16 0.03 265);
+  --surface: oklch(0.21 0.035 265);
+  --surface-2: oklch(0.25 0.04 265);
+  --border: oklch(0.33 0.04 265);
+  --text: oklch(0.95 0.01 250);
+  --muted: oklch(0.75 0.02 255);
+  --field: oklch(0.8 0.13 210);
+  --on-field: oklch(0.18 0.03 265);
+  --photon: oklch(0.72 0.17 295);
+  --energy: oklch(0.82 0.15 75);
+  --danger: oklch(0.7 0.19 25);
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --glow: 0 0 0 1px var(--border), 0 8px 30px -12px color-mix(in oklch, var(--field) 35%, transparent);
+  color-scheme: dark;
+}
+
+/* ---------- Colour tokens: Lab Light ---------- */
+[data-theme="light"] {
+  --bg: oklch(0.985 0.005 250);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.96 0.01 250);
+  --border: oklch(0.88 0.015 255);
+  --text: oklch(0.22 0.03 265);
+  --muted: oklch(0.46 0.02 260);
+  --field: oklch(0.5 0.14 225);
+  --on-field: oklch(0.99 0 0);
+  --photon: oklch(0.5 0.19 295);
+  --energy: oklch(0.55 0.15 65);
+  --danger: oklch(0.53 0.2 25);
+  --glow: 0 0 0 1px var(--border), 0 8px 30px -14px color-mix(in oklch, var(--field) 25%, transparent);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-field: var(--field);
+  --color-on-field: var(--on-field);
+  --color-photon: var(--photon);
+  --color-energy: var(--energy);
+  --color-danger: var(--danger);
+  --color-ring: var(--field);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --shadow-glow: var(--glow);
+
+  --animate-orbit: orbit 1.2s linear infinite;
+  --animate-orbit-slow: orbit 3.39s linear infinite; /* 1.2 s × √8: Kepler-ish period ratio */
+  --animate-wave: wave 1.1s linear infinite;
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+  --animate-pulse-node: pulse-node 1.6s ease-in-out infinite;
+}
+
+@keyframes orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes wave {
+  to {
+    transform: translateX(-12px);
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+@keyframes pulse-node {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--field) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--field) 0%, transparent);
+  }
+}
+
+/* ---------- Base ---------- */
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--text);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display), Georgia, "Times New Roman", serif;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+  }
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono), ui-monospace, monospace;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--field) 35%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--field);
+    outline-offset: 2px;
+  }
+  /* iOS: inputs ≥ 16px never trigger zoom */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1rem);
+  }
+}
+
+/* ---------- Answer prose (each Markdown block is its own Streamdown root) ---------- */
+.physics-prose {
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.physics-prose > * + * {
+  margin-top: 0.85rem;
+}
+.physics-prose strong {
+  font-weight: 650;
+}
+.physics-prose ul,
+.physics-prose ol {
+  padding-left: 1.4rem;
+}
+
+/* ---------- Maths ---------- */
+.katex {
+  font-size: 1.08em;
+  color: inherit;
+}
+.katex-display {
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+/* ---------- Physics illustrations (src/components/physics/illustrations.tsx) ---------- */
+.ill {
+  color: color-mix(in oklch, var(--text) 80%, transparent);
+  overflow: visible;
+}
+.ill * {
+  transform-box: view-box;
+}
+.ill-label {
+  font-family: var(--font-display), Georgia, serif;
+}
+/* Calculator display: body font with tabular figures (no monospace font download on the landing page). */
+.ill-digits {
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Newton's cradle: up the swing slows (ease-out), down it speeds up (ease-in). */
+@keyframes ill-cradle-l {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: ease-out;
+  }
+  14% {
+    transform: rotate(28deg);
+    animation-timing-function: ease-in;
+  }
+  28%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@keyframes ill-cradle-r {
+  0%,
+  50% {
+    transform: rotate(0deg);
+    animation-timing-function: ease-out;
+  }
+  64% {
+    transform: rotate(-28deg);
+    animation-timing-function: ease-in;
+  }
+  78%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+.ill-cradle-l {
+  animation: ill-cradle-l 2.4s infinite;
+}
+.ill-cradle-r {
+  animation: ill-cradle-r 2.4s infinite;
+}
+
+@keyframes ill-swing {
+  from {
+    transform: rotate(18deg);
+  }
+  to {
+    transform: rotate(-18deg);
+  }
+}
+.ill-swing {
+  animation: ill-swing 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes ill-sway {
+  from {
+    transform: rotate(-4deg);
+  }
+  to {
+    transform: rotate(4deg);
+  }
+}
+.ill-sway {
+  animation: ill-sway 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes ill-dash {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+@keyframes ill-dash-fast {
+  to {
+    stroke-dashoffset: -98;
+  }
+}
+@keyframes ill-dash-down {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+.ill-flow {
+  animation: ill-dash 1.6s linear infinite;
+}
+.ill-flow-fast {
+  animation: ill-dash-fast 1.4s linear infinite;
+}
+.ill-flow-down {
+  animation: ill-dash-down 0.8s linear infinite;
+}
+
+@keyframes ill-glint {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.ill-glint {
+  animation: ill-glint 2.4s ease-in-out infinite;
+}
+
+@keyframes ill-glow {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.ill-glow {
+  animation: ill-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes ill-flicker {
+  0%,
+  40%,
+  100% {
+    opacity: 0;
+  }
+  45%,
+  55% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.ill-flicker {
+  animation: ill-flicker 1.8s steps(1, end) infinite;
+}
+
+@keyframes ill-key {
+  0%,
+  20%,
+  100% {
+    fill: transparent;
+  }
+  5%,
+  12% {
+    fill: color-mix(in oklch, var(--field) 60%, transparent);
+  }
+}
+.ill-key {
+  animation: ill-key 2.4s ease-in-out infinite;
+}
+
+@keyframes ill-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.ill-pulse {
+  animation: ill-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ill-rise {
+  0%,
+  100% {
+    transform: scaleY(0.55);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.ill-rise {
+  animation: ill-rise 3.2s ease-in-out infinite;
+}
+
+@keyframes ill-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ill-spin {
+  animation: ill-spin 6s linear infinite;
+}
+
+@keyframes ill-highlight {
+  0% {
+    transform: scaleX(0);
+  }
+  40%,
+  80% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+.ill-highlight {
+  animation: ill-highlight 2.8s ease-out infinite;
+}
+
+@keyframes ill-draw {
+  0% {
+    stroke-dashoffset: 80;
+  }
+  50%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+.ill-draw {
+  animation: ill-draw 3s ease-in-out infinite;
+}
+
+/* Parabola = constant horizontal velocity × vertical ease-out (up) then ease-in (down). */
+@keyframes ill-proj-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(148px);
+  }
+}
+@keyframes ill-proj-y {
+  0% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1);
+  }
+  50% {
+    transform: translateY(-58px);
+    animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+.ill-proj-x {
+  animation: ill-proj-x 2.2s linear infinite;
+}
+.ill-proj-y {
+  animation: ill-proj-y 2.2s infinite;
+}
+
+/* Hover: the apple falls (gravity wins). */
+.ill-apple {
+  transition: transform 0.45s cubic-bezier(0.55, 0, 1, 0.45);
+}
+.group:hover .ill-apple,
+.group:focus-visible .ill-apple {
+  transform: translateY(10px);
+}
+
+/* Graph paper (lab notebook) and the faint doodle tile (public/doodles.svg). */
+.graph-paper {
+  background-image:
+    linear-gradient(color-mix(in oklch, var(--border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--border) 45%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.doodles {
+  position: relative;
+  isolation: isolate;
+}
+.doodles::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--muted);
+  opacity: 0.055;
+  -webkit-mask: url("/doodles.svg") repeat 0 0 / 360px 360px;
+  mask: url("/doodles.svg") repeat 0 0 / 360px 360px;
+}
+
+/* ---------- Reduced motion (OS setting or user override) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.15s !important;
+    scroll-behavior: auto !important;
+  }
+}
+[data-motion="reduce"] *,
+[data-motion="reduce"] *::before,
+[data-motion="reduce"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.15s !important;
+  scroll-behavior: auto !important;
+}
+
+@media print {
+  [data-print-hide] {
+    display: none !important;
+  }
+}
