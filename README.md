@@ -26,11 +26,7 @@ An AI physics tutor that explains the idea, works through the maths step by step
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
-- [How it works](#how-it-works)
 - [Run it locally](#run-it-locally)
-- [Environment variables](#environment-variables)
-- [Deploy to Vercel](#deploy-to-vercel)
-- [Usage limits](#usage-limits)
 - [Project structure](#project-structure)
 - [License](#license)
 
@@ -44,8 +40,7 @@ An AI physics tutor that explains the idea, works through the maths step by step
 - **Layered memory.** Recent turns, a rolling summary and structured physics facts (the active problem, symbols and the learner's level).
 - **Guest mode.** Ask questions without an account; sign in to keep going and save every chat to your history.
 - **Model fallback chain.** If a model is down or rate limited, the next one answers.
-- **Physics-inspired UI.** Particle-field background, Dark Matter and Lab Light themes, a command palette, fully responsive and accessible.
-- **Free-tier friendly.** Built to run on Vercel Hobby, Neon, Upstash, Groq and Gemini free tiers.
+
 
 ## Screenshots
 
@@ -86,28 +81,7 @@ An AI physics tutor that explains the idea, works through the maths step by step
 | Hosting | ![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white) Hobby tier, daily cron |
 | Tooling | ![Node.js](https://img.shields.io/badge/Node.js_22+-339933?logo=nodedotjs&logoColor=white) ![pnpm](https://img.shields.io/badge/pnpm_11-F69220?logo=pnpm&logoColor=white) ESLint, Prettier |
 
-## How it works
 
-```mermaid
-flowchart LR
-    U[Student] -->|question| C["/api/chat"]
-    C --> L[Limits and guest gate]
-    L --> R[Router: scope and query type]
-    R -->|textbook attached| H[Hybrid retrieval<br/>pgvector + full text, RRF]
-    H --> E[Evidence pack]
-    R --> G[Groq model chain]
-    E --> G
-    G -->|token stream| U
-    G --> S[Citations and memory saved to Neon]
-
-    P[PDF upload] -->|direct to Blob| B[(Vercel Blob)]
-    B --> J[Resumable job:<br/>extract, structure, chunk, embed]
-    J --> N[(Neon + pgvector)]
-    N --> H
-```
-
-- **Ingestion** runs as a lease-based, resumable job in short function slices, so a 250-page book fits within Vercel's free-tier limits. Embedding requests are paced to Gemini's free quota and pause automatically when the daily cap is reached; a daily cron resumes stalled jobs.
-- **Retrieval** runs on every tutoring turn when a textbook is attached. Weak matches fall back to general physics knowledge, clearly marked, rather than inventing citations.
 
 ## Run it locally
 
@@ -155,64 +129,7 @@ Open [http://localhost:3000](http://localhost:3000). With an empty `.env.local` 
 | `pnpm db:studio` | Browse the database in Drizzle Studio |
 | `pnpm smoke:models` | Call every model in the chain and print time to first token |
 
-## Environment variables
 
-All variables are listed in [`.env.example`](.env.example). Every service is optional locally; set them in `.env.local` for development and in **Vercel, Settings, Environment Variables** for production. Never commit real values.
-
-| Variable | Required in production | Where to get it |
-| --- | :---: | --- |
-| `DATABASE_URL` | Yes | Neon, Connect, pooled connection string |
-| `DATABASE_URL_UNPOOLED` | Yes | Neon, Connect, direct connection string |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Yes | Clerk, API keys |
-| `CLERK_SECRET_KEY` | Yes | Clerk, API keys |
-| `CLERK_WEBHOOK_SIGNING_SECRET` | Yes | Clerk, Webhooks (see below) |
-| `GROQ_API_KEY` | Yes | Groq console, API keys |
-| `MODEL_CHAIN` | Recommended | Comma-separated Groq model ids, best first |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Yes | Google AI Studio, Get API key |
-| `UPSTASH_REDIS_REST_URL` | Yes | Upstash, Redis, REST API |
-| `UPSTASH_REDIS_REST_TOKEN` | Yes | Upstash, Redis, REST API |
-| `BLOB_READ_WRITE_TOKEN` | Yes | Added by Vercel when you connect a Blob store |
-| `ANON_COOKIE_SECRET` | Yes | Random string, at least 32 characters |
-| `CRON_SECRET` | Yes | Random string |
-| `INTERNAL_JOB_SECRET` | Yes | Random string |
-| `NEXT_PUBLIC_APP_URL` | Recommended | Your production URL, e.g. `https://quirophysics.vercel.app` |
-
-Generate a random secret with `openssl rand -hex 32`, or in PowerShell:
-```powershell
--join ((1..32) | % { '{0:x2}' -f (Get-Random -Max 256) })
-```
-
-**Optional tuning:** `EMBEDDING_REQUESTS_PER_MINUTE` (default 95), `RETAIN_PDF`, `UPLOAD_QUOTA_PER_WEEK`, `MAX_ACTIVE_DOCUMENTS`, `MAX_PDF_SIZE_MB`, `MAX_PDF_PAGES`, `GUEST_MAX_TURNS_PER_THREAD`, `GUEST_MAX_THREADS_PER_DAY`, `USER_MAX_MESSAGES_PER_DAY`, `ENABLE_OCR`, `ENABLE_PROMPT_GUARD`.
-
-> [!WARNING]
-> `E2E_TEST_AUTH`, `LLM_MODE`, `PGLITE_DIR`, `MOCK_LLM_DELAY_MS`, `MOCK_EMBED_DELAY_MS`, `LOCAL_BLOB_DIR` and `ENABLE_DEV_PAGES` are for local testing only. Never set them on Vercel.
-
-## Deploy to Vercel
-
-1. **Import the repository** in Vercel (Add New, Project). The project name sets the address: name it `quirophysics` for `quirophysics.vercel.app`. Keep the Next.js preset and the default build settings.
-2. **Add the environment variables** above for the Production environment before the first deploy.
-3. **Create a Blob store** (Storage, Create, Blob, Private access) and connect it to the project. This adds `BLOB_READ_WRITE_TOKEN`.
-4. **Pick the function region** closest to your Neon database (Settings, Functions), for example `iad1` for AWS us-east-1.
-5. **Run the migrations once** from your machine with `pnpm db:migrate` (never in the Vercel build).
-6. **Deploy.**
-7. **Add the Clerk webhook:** Clerk, Webhooks, endpoint `https://<your-domain>/api/webhooks/clerk` with the events `user.created`, `user.updated` and `user.deleted`. Put the signing secret into `CLERK_WEBHOOK_SIGNING_SECRET` and redeploy.
-8. **Check** that Settings, Cron Jobs lists `/api/cron/cleanup` (daily, from [`vercel.json`](vercel.json)), then try a guest question, sign up, upload a PDF and ask about it.
-
-> [!NOTE]
-> Clerk development keys (`pk_test_`) work on `*.vercel.app` with a small development badge. A Clerk production instance needs a domain you own.
-
-## Usage limits
-
-Defaults, all configurable through environment variables.
-
-| Limit | Default |
-| --- | --- |
-| Guest turns per conversation | 6 |
-| Guest conversations per day | 3 |
-| Signed-in messages per day | 50 |
-| PDF uploads per rolling 7 days | 3 |
-| Active PDFs per account | 5 |
-| PDF size and length | 10 MB, 300 pages |
 
 ## Project structure
 

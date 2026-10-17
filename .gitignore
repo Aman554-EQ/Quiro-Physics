@@ -60,6 +60,7 @@ scripts/test-section.mjs
 # All Markdown files except the public README
 *.md
 !README.md
+Readme-1.md
 
 # Local test PDFs / uploads
 *.pdf
