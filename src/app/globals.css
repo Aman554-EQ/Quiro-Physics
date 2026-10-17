@@ -173,6 +173,24 @@
   padding: 0.25rem 0;
 }
 
+/* Answers on narrow screens: long words and URLs wrap; tables and code scroll inside their own box. */
+.physics-md {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.physics-md .katex {
+  overflow-wrap: normal;
+}
+.physics-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.physics-md pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 /* ---------- Physics illustrations (src/components/physics/illustrations.tsx) ---------- */
 .ill {
   color: color-mix(in oklch, var(--text) 80%, transparent);

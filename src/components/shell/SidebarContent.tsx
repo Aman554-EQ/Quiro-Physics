@@ -28,12 +28,12 @@ export function SidebarContent({
   const { newChat, setPaletteOpen, viewer } = useShell();
 
   return (
-    <div className="flex h-full flex-col gap-4 p-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
       <Link
         href="/"
         onClick={onNavigate}
         className={cn(
-          "flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2 py-1.5",
+          "flex shrink-0 items-center gap-2.5 rounded-[var(--radius-sm)] px-2 py-1.5",
           collapsed && "justify-center px-0",
         )}
         aria-label="Quiro Physics home"
@@ -45,13 +45,13 @@ export function SidebarContent({
         variant="primary"
         onClick={newChat}
         aria-label="New chat"
-        className={cn("w-full", collapsed && "size-11 w-11 self-center p-0")}
+        className={cn("w-full shrink-0", collapsed && "size-11 w-11 self-center p-0")}
       >
         <Plus className="size-5" aria-hidden />
         {!collapsed && <span>New chat</span>}
       </Button>
 
-      <nav aria-label="Main" className="flex flex-col gap-1">
+      <nav aria-label="Main" className="flex shrink-0 flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = item.icon;
@@ -89,7 +89,7 @@ export function SidebarContent({
       </nav>
 
       {!collapsed && (
-        <section aria-labelledby="recent-heading" className="mt-2 flex min-h-0 flex-1 flex-col gap-2 px-1">
+        <section aria-labelledby="recent-heading" className="mt-2 flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto px-1">
           <h2 id="recent-heading" className="text-muted px-2 text-xs font-medium tracking-[0.12em] uppercase">
             Recent chats
           </h2>
@@ -97,15 +97,17 @@ export function SidebarContent({
             <RecentChats onNavigate={onNavigate} />
           ) : (
             <p className="border-border text-muted rounded-[var(--radius-sm)] border border-dashed px-3 py-3 text-sm">
-              Sign in to keep your chat history. Guests can ask 6 follow-ups per question.
+              Sign in to save your chats and pick up where you left off.
             </p>
           )}
         </section>
       )}
       {collapsed && <div className="flex-1" />}
 
-      <AccountButton collapsed={collapsed} />
-      <div className={cn("border-border flex items-center gap-1 border-t pt-3", collapsed && "flex-col")}>
+      <div className="mt-3 shrink-0">
+        <AccountButton collapsed={collapsed} />
+      </div>
+      <div className={cn("border-border flex shrink-0 items-center gap-1 border-t pt-3", collapsed && "flex-col")}>
         <Button
           variant="ghost"
           size={collapsed ? "icon" : "md"}

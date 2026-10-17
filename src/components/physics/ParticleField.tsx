@@ -57,40 +57,56 @@ export function ParticleField({ className, seed = 7 }: { className?: string; see
       particles = createParticles(particleCount(width), { width, height }, mulberry32(seed));
     };
 
+    // Batched drawing: links grouped into a few opacity levels and particles by colour, so each
+    // frame is a handful of stroke()/fill() calls instead of one per line (colour strings are
+    // parsed once per batch, not once per line). It was the largest main-thread cost on phones.
+    const LEVELS = 4;
     const draw = () => {
       ctx.clearRect(0, 0, width, height);
       ctx.lineWidth = 0.6;
+      ctx.strokeStyle = colors.field;
+      const buckets: number[][] = Array.from({ length: LEVELS }, () => []);
       for (let i = 0; i < particles.length; i++) {
         const a = particles[i]!;
         for (let j = i + 1; j < particles.length; j++) {
           const b = particles[j]!;
           const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < LINK_DISTANCE) {
-            ctx.globalAlpha = (1 - d / LINK_DISTANCE) * 0.28;
-            ctx.strokeStyle = colors.field;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
+          if (d < LINK_DISTANCE) buckets[Math.min(LEVELS - 1, Math.floor((1 - d / LINK_DISTANCE) * LEVELS))]!.push(a.x, a.y, b.x, b.y);
         }
       }
-      for (const p of particles) {
-        ctx.globalAlpha = 0.85;
-        ctx.fillStyle = p.hue === "photon" ? colors.photon : colors.field;
+      buckets.forEach((seg, level) => {
+        if (!seg.length) return;
+        ctx.globalAlpha = ((level + 0.5) / LEVELS) * 0.28;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        for (let k = 0; k < seg.length; k += 4) {
+          ctx.moveTo(seg[k]!, seg[k + 1]!);
+          ctx.lineTo(seg[k + 2]!, seg[k + 3]!);
+        }
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 0.85;
+      for (const hue of ["field", "photon"] as const) {
+        ctx.fillStyle = colors[hue];
+        ctx.beginPath();
+        for (const p of particles) {
+          if (p.hue !== hue) continue;
+          ctx.moveTo(p.x + p.r, p.y);
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        }
         ctx.fill();
       }
       ctx.globalAlpha = 1;
     };
 
+    // Decoration: 30 frames a second is smooth enough and halves the work.
+    const FRAME_MS = 1000 / 30;
     const frame = (t: number) => {
+      raf = requestAnimationFrame(frame);
+      if (last && t - last < FRAME_MS - 1) return;
       const dt = last ? Math.min(3, (t - last) / (1000 / 60)) : 1;
       last = t;
       step(particles, { width, height }, pointer, dt);
       draw();
-      raf = requestAnimationFrame(frame);
     };
 
     const start = () => {

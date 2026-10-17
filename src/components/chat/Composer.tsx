@@ -72,7 +72,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           placeholder={disabled ? (disabledReason ?? "") : "Ask a physics question…"}
           aria-describedby="composer-hint"
           aria-invalid={over || undefined}
-          className="text-text placeholder:text-muted max-h-[220px] min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 leading-6 outline-none"
+          className="text-text placeholder:text-muted max-h-[220px] min-h-11 [@media(max-height:480px)]:max-h-[96px] flex-1 resize-none bg-transparent px-2 py-2.5 leading-6 outline-none"
         />
         {busy ? (
           <Button
@@ -101,7 +101,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         id="composer-hint"
         className="text-muted mt-1.5 flex min-h-5 items-center justify-between gap-3 px-1 text-xs"
       >
-        <span className="truncate">{footer}</span>
+        <span className="truncate [@media(max-height:480px)]:hidden">{footer}</span>
         {length >= COUNTER_FROM && (
           <span
             data-testid="char-counter"
