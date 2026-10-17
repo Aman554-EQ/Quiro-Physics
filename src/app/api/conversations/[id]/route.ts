@@ -8,6 +8,7 @@ import {
   renameConversation,
   setPinned,
 } from "@/server/db/queries/conversations";
+import { ownedDocumentIds, setConversationDocuments } from "@/server/db/queries/documents";
 import { NotFoundError, route } from "@/server/http";
 
 export const runtime = "nodejs";
@@ -32,8 +33,12 @@ const PatchSchema = z
   .object({
     title: z.string().trim().min(1).max(120).optional(),
     pinned: z.boolean().optional(),
+    /** Textbooks for this chat: at most 5, all owned by the caller (P3-S5-A12). */
+    documentIds: z.array(z.string().uuid()).max(5).optional(),
   })
-  .refine((b) => b.title !== undefined || b.pinned !== undefined, { message: "Nothing to update" });
+  .refine((b) => b.title !== undefined || b.pinned !== undefined || b.documentIds !== undefined, {
+    message: "Nothing to update",
+  });
 
 export const PATCH = route(async (req: Request, ctx: Ctx) => {
   const { userId } = await requireUser();
@@ -43,6 +48,15 @@ export const PATCH = route(async (req: Request, ctx: Ctx) => {
   let row = null;
   if (body.title !== undefined) row = await renameConversation(db, userId, id, body.title);
   if (body.pinned !== undefined) row = await setPinned(db, userId, id, body.pinned);
+  if (body.documentIds !== undefined) {
+    row = await getConversation(db, userId, id);
+    if (!row) throw new NotFoundError();
+    const ids = [...new Set(body.documentIds)];
+    const owned = await ownedDocumentIds(db, userId, ids);
+    // Someone else's (or a deleted) document id: not found, and nothing is changed.
+    if (owned.length !== ids.length) throw new NotFoundError("Document");
+    await setConversationDocuments(db, id, owned);
+  }
   if (!row) throw new NotFoundError();
   return Response.json({ ...row, lastMessageAt: row.lastMessageAt.toISOString() });
 });

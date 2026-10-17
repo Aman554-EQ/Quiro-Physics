@@ -3,11 +3,12 @@ import "server-only";
 import { createUIMessageStream, createUIMessageStreamResponse, streamText } from "ai";
 import { eq } from "drizzle-orm";
 
-import { userPreferences } from "@/db/schema";
+import { messageCitations, userPreferences } from "@/db/schema";
 import { pickScript } from "@/lib/mock/scripts";
 import { runAfter } from "@/server/after";
 import { getOptionalUser } from "@/server/auth/require-user";
 import { getDb, type Db } from "@/server/db";
+import { ownedDocumentIds, readyDocuments, setConversationDocuments } from "@/server/db/queries/documents";
 import { AppError } from "@/server/http";
 import { getKV, type KV } from "@/server/kv";
 import { appendGuestTurn, LimitError, openGuestTurn, type GuestTurn } from "@/server/limits/guest-threads";
@@ -16,12 +17,21 @@ import { RATE_LIMITS, slidingWindow } from "@/server/limits/rate-limit";
 import { dailyMessageUsage } from "@/server/limits/user-limits";
 import { getLlm, type Llm } from "@/server/llm";
 import { logger } from "@/server/log";
-import { buildContext, assembleTutorMessages, recentAsText, type BuiltContext } from "@/server/memory/context";
+import {
+  assembleTutorMessages,
+  buildContext,
+  recentAsText,
+  withoutDeletedDocuments,
+  type BuiltContext,
+} from "@/server/memory/context";
 import { loadHistory } from "@/server/memory/history";
 import { getMemory, invalidateSummaryFrom, maybeSummarize } from "@/server/memory/summary";
 import { CapacityError, ModelError } from "@/server/models/errors";
 import type { ModelRole } from "@/server/models/registry";
 import { streamWithFallback } from "@/server/models/router";
+import { getEmbeddings } from "@/server/rag/embeddings";
+import { buildEvidenceBlock, NO_EVIDENCE_NOTE, toSources, validateCitations } from "@/server/rag/evidence";
+import { hybridRetrieve, type EvidenceChunk } from "@/server/rag/retrieve/hybrid-retriever";
 import { ChatRequestSchema, MAX_QUESTION_TOKENS, type ThreadInfo } from "@/shared/chat-api";
 import { GREETING_REPLY, offTopicRedirect, UNSAFE_REFUSAL } from "@/shared/redirects";
 import type { Limit, MessagePart, Source } from "@/shared/ui-message";
@@ -109,6 +119,8 @@ export async function handleChat(req: Request): Promise<Response> {
   let userTurn: { conversationId: string; seq: number; isNew: boolean } | null = null;
   let db: Db | null = null;
   let guestThreadId: string | null = null;
+  /** The user's selected, ready textbooks for this turn (guests have none). */
+  let textbooks: { id: string; title: string }[] = [];
 
   if (identity.kind === "user") {
     db = await getDb();
@@ -130,8 +142,15 @@ export async function handleChat(req: Request): Promise<Response> {
       loadHistory(db, identity.userId, turn.conversationId, { beforeSeq: turn.userMessage.seq }),
       getMemory(db, turn.conversationId),
     ]);
-    context = buildContext(history, memory);
+    const referenced = memory?.facts?.referencedSections?.map((r) => r.documentId) ?? [];
+    const alive = new Set(referenced.length ? await ownedDocumentIds(db, identity.userId, referenced) : []);
+    context = buildContext(history, memory && { ...memory, facts: withoutDeletedDocuments(memory.facts ?? {}, alive) });
     level = await explanationLevel(db, identity.userId);
+    // The request's selection is authoritative and saved with the conversation; ids the user
+    // doesn't own are dropped silently (P3-S5-A04/A12).
+    const owned = await ownedDocumentIds(db, identity.userId, body.documentIds);
+    await setConversationDocuments(db, turn.conversationId, owned);
+    textbooks = await readyDocuments(db, identity.userId, owned);
     assistantId = turn.assistantId;
     userTurn = { conversationId: turn.conversationId, seq: turn.userMessage.seq, isNew: turn.isNewConversation };
     thread = { kind: "conversation", id: turn.conversationId, title: turn.title };
@@ -177,6 +196,8 @@ export async function handleChat(req: Request): Promise<Response> {
       let sources: Source[] = [];
       let result: AssistantResult = { status: "error", content: "", parts: [] };
       let route: Route | null = null;
+      let evidence: EvidenceChunk[] = [];
+      let usedLabels: number[] = [];
 
       try {
         write({ type: "start", messageId: assistantId ?? undefined });
@@ -187,7 +208,7 @@ export async function handleChat(req: Request): Promise<Response> {
           message: text,
           recent: recentAsText(context.recent),
           summary: context.summary,
-          documentTitles: [],
+          documentTitles: textbooks.map((t) => t.title),
           signal: req.signal,
         });
         route = router.route;
@@ -201,9 +222,40 @@ export async function handleChat(req: Request): Promise<Response> {
             retries: router.retries,
             fallbackUsed: router.fallbackUsed,
           });
+        const canned0 = CANNED[route.scope];
+        // With a textbook attached every tutoring turn searches it (a few hundred ms): the router
+        // can't always tell that "written by?" is about the book, and an unsearched question
+        // about the book gets a guessed answer. Weak hits are kept only when the router asked.
+        const wantsTextbook = !canned0 && textbooks.length > 0 && db !== null && identity.kind === "user";
+        const asked = route.needsRetrieval || route.queryType === "textbook_lookup" || route.queryType === "mixed";
+        let strength: "strong" | "weak" | "none" = "none";
+        if (wantsTextbook && db && identity.kind === "user") {
+          write({ type: "data-status", data: { stage: "measure" }, transient: true });
+          try {
+            const r = await hybridRetrieve(db, getEmbeddings(), {
+              userId: identity.userId,
+              documentIds: textbooks.map((t) => t.id),
+              query: route.standaloneQuestion,
+            });
+            evidence = r.strength === "weak" && !asked ? [] : r.evidence;
+            strength = evidence.length ? r.strength : "none";
+          } catch (err) {
+            // Retrieval trouble must not cost the learner an answer: continue without evidence.
+            logger.warn("rag.retrieve_failed", { name: (err as Error)?.name ?? "unknown" });
+          }
+          // Provisional sources: the panel fills before the first token (P3-S6-A04).
+          if (evidence.length) {
+            sources = toSources(evidence);
+            write({ type: "data-sources", data: sources });
+          }
+        }
         write({
           type: "data-route",
-          data: { scope: route.scope, queryType: route.queryType, usingTextbook: llm.mode === "mock" && route.needsRetrieval },
+          data: {
+            scope: route.scope,
+            queryType: route.queryType,
+            usingTextbook: evidence.length > 0 || (llm.mode === "mock" && route.needsRetrieval && !textbooks.length),
+          },
           transient: true,
         });
 
@@ -227,7 +279,7 @@ export async function handleChat(req: Request): Promise<Response> {
         }
 
         // Retrieval arrives in Phase 3. The offline demo tutor shows its labelled sample sources.
-        if (llm.mode === "mock" && route.needsRetrieval) {
+        if (llm.mode === "mock" && route.needsRetrieval && !textbooks.length) {
           sources = pickScript(text).sources ?? [];
           if (sources.length) {
             write({ type: "data-status", data: { stage: "measure" }, transient: true });
@@ -242,6 +294,7 @@ export async function handleChat(req: Request): Promise<Response> {
           system,
           context,
           question: route.standaloneQuestion,
+          evidence: evidence.length ? buildEvidenceBlock(evidence, strength) : wantsTextbook && asked ? NO_EVIDENCE_NOTE : undefined,
         });
         const effort = reasoningEffort(route.difficulty, isGuest);
         const routed = await streamWithFallback(
@@ -299,7 +352,18 @@ export async function handleChat(req: Request): Promise<Response> {
         }
 
         write({ type: "data-status", data: { stage: "verify" }, transient: true });
-        if (sources.length) write({ type: "data-sources", data: sources });
+        if (evidence.length) {
+          // Only citations of passages that were really retrieved survive (RAG_PIPELINE.md §9).
+          const checked = validateCitations(answer, new Set(evidence.map((e) => e.label)));
+          if (checked.removed || checked.text !== answer) {
+            logger.info("rag.citations_removed", { removed: checked.removed });
+            answer = checked.text;
+            write({ type: "data-text-final", data: { text: answer } });
+          }
+          usedLabels = checked.used;
+          sources = toSources(evidence, usedLabels);
+          write({ type: "data-sources", data: sources });
+        } else if (sources.length) write({ type: "data-sources", data: sources });
         write({ type: "data-limit", data: limitPart });
         const usage = await routed.usage();
         write({
@@ -354,6 +418,7 @@ export async function handleChat(req: Request): Promise<Response> {
       } finally {
         try {
           await persist(llm, db, identity, assistantId, userTurn, guestThreadId, text, result, body.regenerate);
+          if (db && assistantId && result.status !== "error") await saveCitations(db, assistantId, evidence, usedLabels);
         } finally {
           resolveDone();
         }
@@ -452,5 +517,32 @@ async function persist(
       }
     }
     await appendGuestTurn(kv, guestThreadId, turns);
+  }
+}
+
+/** Citation snapshots: title, pages and quote survive the document's deletion (P3-S6-A03/A09). */
+async function saveCitations(db: Db, messageId: string, evidence: EvidenceChunk[], labels: number[]) {
+  try {
+    await db.delete(messageCitations).where(eq(messageCitations.messageId, messageId));
+    const used = toSources(evidence, labels);
+    if (!used.length) return;
+    await db.insert(messageCitations).values(
+      used.map((s) => {
+        const e = evidence.find((x) => x.label === s.label)!;
+        return {
+          messageId,
+          label: s.label,
+          documentId: e.documentId,
+          chunkId: e.chunkId,
+          documentTitle: s.title,
+          pageStart: s.pageStart,
+          pageEnd: s.pageEnd,
+          quote: s.quote,
+          score: e.score,
+        };
+      }),
+    );
+  } catch (err) {
+    logger.warn("rag.citations_save_failed", { name: (err as Error)?.name ?? "unknown" });
   }
 }

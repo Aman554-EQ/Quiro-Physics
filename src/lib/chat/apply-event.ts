@@ -46,6 +46,14 @@ export function applyEvent(message: ChatMessage, event: StreamEvent): ChatMessag
       else parts.push(part);
       return { ...message, parts };
     }
+    case "data-text-final": {
+      // One text part holding the validated answer, where the first text part was.
+      const first = parts.findIndex((p) => p.type === "text");
+      const rest = parts.filter((p) => p.type !== "text");
+      const at = first < 0 ? rest.length : first;
+      rest.splice(at, 0, { type: "text", text: event.data.text });
+      return { ...message, parts: rest };
+    }
     case "data-status":
       return { ...message, meta: { ...message.meta, stage: event.data.stage } };
     case "data-route":

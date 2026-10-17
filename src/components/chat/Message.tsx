@@ -86,7 +86,7 @@ function AssistantMessage({ message, isLast, onOpenSource, onRetry, onContinue }
             data-testid="route-badge"
           >
             {ROUTE_LABEL[route.queryType]}
-            {route.usingTextbook && route.queryType !== "mixed" ? " · from your textbook" : ""}
+            {route.usingTextbook && route.queryType !== "mixed" && route.queryType !== "textbook_lookup" ? " · from your textbook" : ""}
           </span>
         )}
         {streaming && <PipelineStatus stage={message.meta?.stage ?? "observe"} compact />}

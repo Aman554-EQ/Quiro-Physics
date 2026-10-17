@@ -13,6 +13,8 @@ export interface SendInput {
   signal: AbortSignal;
   /** Replace the last answer instead of adding a new turn. */
   regenerate?: boolean;
+  /** Textbooks selected for this chat (signed-in users). */
+  documentIds?: string[];
 }
 
 /** Anything that turns a user message into a stream of UI message events. */

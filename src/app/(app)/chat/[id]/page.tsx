@@ -4,10 +4,11 @@ import { notFound, redirect } from "next/navigation";
 import { ChatView } from "@/components/chat/ChatView";
 import { signInRedirect } from "@/config/auth-routes";
 import { getOptionalUser } from "@/server/auth/require-user";
-import { rowToChatMessage } from "@/server/chat/hydrate";
+import { rowToChatMessage, withSourceStatus } from "@/server/chat/hydrate";
 import { listMessages, sweepStaleStreaming } from "@/server/chat/persistence";
 import { getDb } from "@/server/db";
 import { getConversation } from "@/server/db/queries/conversations";
+import { conversationDocumentIds } from "@/server/db/queries/documents";
 
 export const metadata: Metadata = { title: "Chat" };
 
@@ -21,11 +22,16 @@ export default async function SavedChatPage({ params }: PageProps<"/chat/[id]">)
   if (!conversation) notFound();
   await sweepStaleStreaming(db, { conversationId: id });
   const rows = await listMessages(db, user.userId, id);
+  const [initialMessages, documentIds] = await Promise.all([
+    withSourceStatus(db, user.userId, rows.map(rowToChatMessage)),
+    conversationDocumentIds(db, user.userId, id),
+  ]);
   return (
     <ChatView
       key={id}
-      initialMessages={rows.map(rowToChatMessage)}
+      initialMessages={initialMessages}
       initialThread={{ kind: "conversation", id }}
+      initialDocumentIds={documentIds}
     />
   );
 }

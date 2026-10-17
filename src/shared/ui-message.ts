@@ -95,6 +95,8 @@ export type StreamEvent =
   | { type: "data-limit"; data: Limit }
   | { type: "data-usage"; data: z.infer<typeof UsageSchema> }
   | { type: "data-thread"; data: { kind: "conversation" | "guest"; id: string; title?: string } }
+  /** The validated answer text (unverifiable citations removed): replaces the streamed text. */
+  | { type: "data-text-final"; data: { text: string } }
   | { type: "finish" }
   | { type: "error"; message: string; code?: string };
 

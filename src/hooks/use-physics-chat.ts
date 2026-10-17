@@ -19,6 +19,8 @@ export interface PhysicsChatOptions {
   initialThread?: ThreadRef | null;
   /** Called when the server assigns a thread (e.g. a new saved conversation). */
   onThread?: (thread: ThreadRef & { title?: string }, isNew: boolean) => void;
+  /** Textbooks to search for each turn (read when a message is sent). */
+  documentIds?: string[];
 }
 
 export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOptions = {}) {
@@ -27,8 +29,10 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
   const [thread, setThread] = useState<ThreadRef | null>(options.initialThread ?? null);
   const threadRef = useRef<ThreadRef | null>(options.initialThread ?? null);
   const onThreadRef = useRef(options.onThread);
+  const documentIdsRef = useRef(options.documentIds ?? []);
   useEffect(() => {
     onThreadRef.current = options.onThread;
+    documentIdsRef.current = options.documentIds ?? [];
   });
   /** Id of the most recently completed assistant message (drives the aria-live announcement). */
   const [completedId, setCompletedId] = useState<string | null>(null);
@@ -119,6 +123,7 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
           message: userMessage,
           signal: controller.signal,
           regenerate,
+          documentIds: documentIdsRef.current,
         })) {
           if (controller.signal.aborted) break;
           if (ev.type === "data-thread") {

@@ -12,9 +12,11 @@ import { createHttpTransport } from "@/lib/chat/http-transport";
 import type { ChatTransport, ThreadRef } from "@/lib/chat/transport";
 import { cn } from "@/lib/cn";
 import { notifyConversationsChanged } from "@/lib/conversations-client";
+import { saveConversationDocuments } from "@/lib/documents-client";
 import { messageSources, type ChatMessage, type Source } from "@/shared/ui-message";
 
 import { Composer, type ComposerHandle } from "./Composer";
+import { DocumentSelector } from "./DocumentSelector";
 import { EmptyChat } from "./EmptyChat";
 import { GuestImportPrompt, rememberGuestThread } from "./GuestImportPrompt";
 import { LimitBanner } from "./LimitBanner";
@@ -28,15 +30,25 @@ interface ChatViewProps {
   /** Saved conversation (signed-in users on /chat/[id]). */
   initialMessages?: ChatMessage[];
   initialThread?: ThreadRef | null;
+  /** Textbooks already selected for this conversation. */
+  initialDocumentIds?: string[];
 }
 
-export function ChatView({ initialQuestion = "", transport, initialMessages, initialThread = null }: ChatViewProps) {
+export function ChatView({
+  initialQuestion = "",
+  transport,
+  initialMessages,
+  initialThread = null,
+  initialDocumentIds = [],
+}: ChatViewProps) {
   const activeTransport = useMemo(() => transport ?? createHttpTransport(), [transport]);
   const shell = useOptionalShell();
   const signedIn = shell?.viewer.signedIn ?? false;
+  const [documentIds, setDocumentIds] = useState<string[]>(initialDocumentIds);
   const chat = usePhysicsChat(activeTransport, {
     initialMessages,
     initialThread,
+    documentIds: signedIn ? documentIds : [],
     onThread: (thread, isNew) => {
       if (thread.kind === "guest") rememberGuestThread(thread.id);
       // A new saved conversation gets its own URL without remounting the chat.
@@ -77,6 +89,12 @@ export function ChatView({ initialQuestion = "", transport, initialMessages, ini
     },
     [isDesktop],
   );
+
+  const chooseDocuments = (ids: string[]) => {
+    setDocumentIds(ids);
+    // A saved chat remembers its textbooks; a new one saves them with its first message.
+    if (chat.thread?.kind === "conversation") void saveConversationDocuments(chat.thread.id, ids).catch(() => undefined);
+  };
 
   const exhausted = chat.limit !== null && chat.limit.kind !== "rate" && chat.limit.remaining === 0;
   const send = () => {
@@ -169,6 +187,11 @@ export function ChatView({ initialQuestion = "", transport, initialMessages, ini
 
         <div className="shrink-0 px-3 pt-2 pb-3 sm:px-6" data-print-hide>
           {signedIn && chat.messages.length === 0 && <GuestImportPrompt />}
+          {signedIn && (
+            <div className="mx-auto mb-2 flex w-full max-w-[820px]">
+              <DocumentSelector value={documentIds} onChange={chooseDocuments} />
+            </div>
+          )}
           {chat.limit && (exhausted || chat.limit.remaining <= 1) && (
             <LimitBanner limit={chat.limit} onNewQuestion={newQuestion} signedIn={signedIn} />
           )}

@@ -8,12 +8,12 @@ import type { ChatTransport, SendInput } from "./transport";
  * The body holds only `{ conversationId | guestThreadId, message, documentIds, regenerate }`; the
  * server rebuilds history itself and never trusts the client's copy (STREAMING.md §2, P2-S4-A06).
  */
-export function buildChatRequest(input: Pick<SendInput, "thread" | "message" | "regenerate">): ChatRequest {
+export function buildChatRequest(input: Pick<SendInput, "thread" | "message" | "regenerate" | "documentIds">): ChatRequest {
   return {
     ...(input.thread?.kind === "conversation" ? { conversationId: input.thread.id } : {}),
     ...(input.thread?.kind === "guest" ? { guestThreadId: input.thread.id } : {}),
     message: { id: input.message.id, text: messageText(input.message) },
-    documentIds: [],
+    documentIds: input.documentIds?.slice(0, 5) ?? [],
     regenerate: input.regenerate ?? false,
   };
 }
@@ -50,6 +50,7 @@ function toEvent(c: Chunk): StreamEvent | null {
     case "data-limit":
     case "data-usage":
     case "data-thread":
+    case "data-text-final":
       return { type: c.type, data: c.data } as StreamEvent;
     case "error":
       return { type: "error", message: String(c.errorText ?? "Something went wrong.") };

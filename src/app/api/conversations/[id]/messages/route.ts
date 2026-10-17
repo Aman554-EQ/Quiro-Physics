@@ -2,7 +2,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 
 import { messages } from "@/db/schema";
 import { requireUser } from "@/server/auth/require-user";
-import { rowToChatMessage } from "@/server/chat/hydrate";
+import { rowToChatMessage, withSourceStatus } from "@/server/chat/hydrate";
 import { getDb } from "@/server/db";
 import { getConversation } from "@/server/db/queries/conversations";
 import { NotFoundError, route } from "@/server/http";
@@ -32,7 +32,7 @@ export const GET = route(async (req: Request, ctx: { params: Promise<{ id: strin
     .limit(PAGE + 1);
   const page = rows.slice(0, PAGE).reverse();
   return Response.json({
-    messages: page.map((r) => ({ ...rowToChatMessage(r), seq: r.seq })),
+    messages: (await withSourceStatus(db, userId, page.map(rowToChatMessage))).map((m, i) => ({ ...m, seq: page[i]!.seq })),
     hasMore: rows.length > PAGE,
   });
 });

@@ -82,6 +82,8 @@ export function factsText(facts: PhysicsFacts): string {
   if (facts.assumptions?.length) lines.push(`Assumptions: ${facts.assumptions.join("; ")}`);
   if (facts.symbols?.length)
     lines.push(`Symbols: ${facts.symbols.map((s) => `${s.symbol} = ${s.meaning}${s.unit ? ` (${s.unit})` : ""}`).join("; ")}`);
+  if (facts.referencedSections?.length)
+    lines.push(`Textbook sections used: ${facts.referencedSections.map((r) => `${r.section} (pp. ${r.pages})`).join("; ")}`);
   if (facts.unresolvedQuestions?.length) lines.push(`Open questions: ${facts.unresolvedQuestions.join("; ")}`);
   let out = "";
   for (const line of lines) {
@@ -90,6 +92,12 @@ export function factsText(facts: PhysicsFacts): string {
     out = next;
   }
   return out;
+}
+
+/** Facts that point at textbooks which no longer exist are dropped when read (P3-S6-A14). */
+export function withoutDeletedDocuments(facts: PhysicsFacts, existing: Set<string>): PhysicsFacts {
+  if (!facts.referencedSections?.length) return facts;
+  return { ...facts, referencedSections: facts.referencedSections.filter((r) => existing.has(r.documentId)) };
 }
 
 export interface BuiltContext {
