@@ -1,3 +1,5 @@
 allowBuilds:
   unrs-resolver: true
   esbuild: true
+overrides:
+  katex: 0.19.0
