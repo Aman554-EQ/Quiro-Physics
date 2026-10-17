@@ -68,6 +68,8 @@ function mergeAdjacent(segs: Segment[]): Segment[] {
 /** "$5", "$3.50", "$1,000" followed by a word, punctuation or the end — but not by a maths operator. */
 const CURRENCY =
   /(?<![\\$])\$(\d[\d,]*(?:\.\d+)?)(?![\d.,]*\d)(?=[\s.,;:!?)\]]|$)(?![ \t]*[+\-=*/^_\\{}<>|])/g;
+/** Same rule, not global: does a string start with something the currency rule would escape? */
+const CURRENCY_AT_START = new RegExp(CURRENCY.source);
 // `(?![\d.,]*\d)` stops backtracking: "$35.3\ \text{m}$" must not be read as "$35" + ".3…"
 // Bracket delimiters never span existing $-maths (keeps the transform idempotent).
 const DISPLAY_BRACKETS = /(?<!\\)\\\[([^$]*?)(?<!\\)\\\]/g;
@@ -94,7 +96,9 @@ function trimInlineMath(text: string): string {
         const open = marks[i]!;
         const close = marks[i + 1]!;
         const inner = line.slice(open + 1, close);
-        const trimmed = inner.trim();
+        let trimmed = inner.trim();
+        // "$ 1.$" must not become "$1.$": the next pass would read that as currency (idempotence).
+        if (CURRENCY_AT_START.exec(`$${trimmed}$${line.slice(close + 1)}`)?.index === 0) trimmed = inner.trimEnd();
         const ok = trimmed && !trimmed.endsWith("\\") && !inner.includes("$");
         out += line.slice(last, open) + "$" + (ok ? trimmed : inner) + "$";
         last = close + 1;
