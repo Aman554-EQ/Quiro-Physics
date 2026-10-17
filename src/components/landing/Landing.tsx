@@ -26,9 +26,9 @@ import { chatHrefFor, SAMPLE_QUESTIONS } from "@/lib/sample-questions";
 import { HowItWorks } from "./HowItWorks";
 import { IntentLink } from "./IntentLink";
 import { LabBench } from "./LabBench";
+import { SiteFooter } from "./SiteFooter";
 
-export const AUTHOR = { name: "Aman554-EQ", url: "https://github.com/Aman554-EQ" } as const;
-export const COPYRIGHT_YEAR = 2026;
+export { AUTHOR, COPYRIGHT_YEAR } from "./SiteFooter";
 
 const CAPABILITIES = [
   {
@@ -119,10 +119,10 @@ export function Landing() {
         className="relative z-10 mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <IntentLink href="/" aria-label="Quiro Physics home" className="rounded-[var(--radius-sm)]">
+        <IntentLink href="/" aria-label="Quiro Physics home" className="inline-flex min-h-11 shrink-0 items-center rounded-[var(--radius-sm)]">
           <Wordmark animated />
         </IntentLink>
-        <nav aria-label="Site" className="ml-auto flex items-center gap-1">
+        <nav aria-label="Site" className="ml-auto flex items-center gap-0.5 sm:gap-1">
           <IntentLink
             href="/lab"
             className="text-muted hover:text-text hidden min-h-11 items-center rounded-md px-3 text-[15px] sm:inline-flex"
@@ -137,9 +137,11 @@ export function Landing() {
           </IntentLink>
           <IntentLink
             href="/chat"
-            className="text-muted hover:text-text inline-flex min-h-11 items-center rounded-md px-3 text-[15px]"
+            aria-label="Open the tutor"
+            className="text-muted hover:text-text inline-flex min-h-11 items-center rounded-md px-2 text-[15px] whitespace-nowrap min-[400px]:px-3"
           >
-            Open the tutor
+            <span className="min-[400px]:hidden">Tutor</span>
+            <span className="hidden min-[400px]:inline">Open the tutor</span>
           </IntentLink>
           <ThemeToggle />
         </nav>
@@ -277,83 +279,5 @@ export function Landing() {
       </main>
       <SiteFooter />
     </div>
-  );
-}
-
-function SiteFooter() {
-  const link = "inline-flex min-h-9 items-center text-muted hover:text-text";
-  return (
-    <footer
-      className="border-border bg-surface/50 border-t"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:grid-cols-[2fr_1fr_1fr] sm:px-6">
-        <div>
-          <Wordmark />
-          <p className="text-muted mt-4 max-w-sm text-sm leading-relaxed">
-            An AI tutor for students of physics. Answers can contain mistakes, so check important results
-            against your course material.
-          </p>
-        </div>
-        <nav aria-label="Product" className="text-sm">
-          <p className="font-medium">Product</p>
-          <ul className="mt-2">
-            <li>
-              <IntentLink href="/chat" className={link}>
-                Tutor
-              </IntentLink>
-            </li>
-            <li>
-              <IntentLink href="/lab" className={link}>
-                Lab
-              </IntentLink>
-            </li>
-            <li>
-              <IntentLink href="/library" className={link}>
-                Library
-              </IntentLink>
-            </li>
-            <li>
-              <IntentLink href="/history" className={link}>
-                History
-              </IntentLink>
-            </li>
-          </ul>
-        </nav>
-        <nav aria-label="Project" className="text-sm">
-          <p className="font-medium">Project</p>
-          <ul className="mt-2">
-            <li>
-              <a href={AUTHOR.url} target="_blank" rel="noopener noreferrer" className={link}>
-                GitHub <ArrowUpRight className="ml-1 size-3.5" aria-hidden />
-              </a>
-            </li>
-            <li>
-              <IntentLink href="/sign-in" className={link}>
-                Sign in
-              </IntentLink>
-            </li>
-            <li>
-              <IntentLink href="/settings" className={link}>
-                Settings
-              </IntentLink>
-            </li>
-          </ul>
-        </nav>
-      </div>
-      <div className="border-border border-t">
-        <p className="text-muted mx-auto max-w-6xl px-4 py-5 text-sm sm:px-6" data-testid="copyright">
-          © {COPYRIGHT_YEAR} Quiro Physics · Built by{" "}
-          <a
-            href={AUTHOR.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-text font-medium underline-offset-4 hover:underline"
-          >
-            {AUTHOR.name}
-          </a>
-        </p>
-      </div>
-    </footer>
   );
 }
