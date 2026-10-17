@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" fill="none" stroke="#000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Faint "chalkboard" doodle tile, used as a CSS mask (.doodles). Colour comes from CSS. -->
+  <g font-family="Georgia, 'Times New Roman', serif" font-style="italic" fill="#000" stroke="none">
+    <text x="24" y="44" font-size="20">F = ma</text>
+    <text x="214" y="170" font-size="18">E = mc²</text>
+    <text x="40" y="250" font-size="16">v = u + at</text>
+    <text x="236" y="318" font-size="16">λ = h / p</text>
+    <text x="196" y="62" font-size="15">V = IR</text>
+  </g>
+  <!-- resistor -->
+  <path d="M120 112 H136 l5 -8 l10 16 l10 -16 l10 16 l5 -8 H192"/>
+  <!-- battery -->
+  <path d="M28 150 V178 M38 156 V172" stroke-width="2.4"/>
+  <path d="M10 164 H28 M38 164 H58"/>
+  <!-- atom -->
+  <ellipse cx="300" cy="96" rx="26" ry="9"/>
+  <ellipse cx="300" cy="96" rx="26" ry="9" transform="rotate(60 300 96)"/>
+  <ellipse cx="300" cy="96" rx="26" ry="9" transform="rotate(-60 300 96)"/>
+  <circle cx="300" cy="96" r="3" fill="#000"/>
+  <!-- horseshoe magnet -->
+  <path d="M110 200 V222 A16 16 0 0 0 142 222 V200 M120 200 V222 A6 6 0 0 0 132 222 V200 M110 200 H120 M132 200 H142"/>
+  <!-- apple -->
+  <path d="M168 262 C162 256, 150 258, 150 270 C150 282, 160 290, 168 287 C176 290, 186 282, 186 270 C186 258, 174 256, 168 262 Z M168 262 C168 258, 170 255, 172 252"/>
+  <!-- pendulum -->
+  <path d="M300 200 H340 M320 200 L332 246"/>
+  <circle cx="334" cy="252" r="6"/>
+  <!-- prism -->
+  <path d="M60 300 L84 340 H36 Z M8 326 L48 318 M72 320 L104 312 M72 320 L104 322 M72 320 L104 332"/>
+  <!-- sine wave -->
+  <path d="M220 236 C228 220, 236 220, 244 236 S260 252, 268 236 S284 220, 292 236"/>
+  <!-- vectors -->
+  <path d="M84 70 L118 52 M110 50 L118 52 L114 59"/>
+  <path d="M250 120 V146 M246 140 L250 146 L254 140"/>
+</svg>
