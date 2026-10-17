@@ -17,10 +17,15 @@ export interface Llm {
 }
 
 const slot = processSingleton<Llm>("llm");
+/** The `env` the current instance was built from, or "test" for one injected by setLlmForTests. */
+const builtFrom = processSingleton<object | "test">("llm-built-from");
 
 export function getLlm(): Llm {
   const existing = slot.get();
-  if (existing) return existing;
+  // The slot outlives hot reloads; a new `env` (edited .env.local, changed schema) means rebuild,
+  // otherwise the old config would keep serving (e.g. without MODEL_CHAIN).
+  const from = builtFrom.get();
+  if (existing && (from === "test" || from === env)) return existing;
   let instance: Llm;
   const kv = getKV();
   const mode = env.LLM_MODE ?? (env.GROQ_API_KEY ? "groq" : "mock");
@@ -36,10 +41,12 @@ export function getLlm(): Llm {
       deps: { kv, config: env, languageModel: (id) => createMockModel(id, env.MOCK_LLM_DELAY_MS) },
     };
   }
+  builtFrom.set(env);
   slot.set(instance);
   return instance;
 }
 
 export function setLlmForTests(llm: Llm | null) {
   slot.set(llm ?? undefined);
+  builtFrom.set(llm ? "test" : undefined);
 }

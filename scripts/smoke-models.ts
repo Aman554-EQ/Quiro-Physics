@@ -19,21 +19,24 @@ const kv = getKV();
 const groq = createBudgetedGroq({ apiKey: env.GROQ_API_KEY, kv });
 const deps = { kv, config: env, languageModel: (id: string) => groq(id) };
 
-const roles = ["router", "tutorComplex", "tutorSimple", "guest", "summary"] as const;
-for (const role of roles) {
-  const chain = chainFor(role, env).map((m) => m.id);
+// Every model of MODEL_CHAIN on its own (a one-model chain each), then the chain as the app walks it.
+const chain = chainFor("tutorComplex", env).map((m) => m.id);
+console.log(`MODEL_CHAIN (chat models, in order): ${chain.join(" → ")}\n`);
+const ask = async (cfg: { MODEL_CHAIN: string }, label: string) => {
   const started = Date.now();
   try {
-    const res = await streamWithFallback(deps, { role, estTokens: 200, purpose: "smoke" }, (model) => {
+    const res = await streamWithFallback({ ...deps, config: cfg }, { role: "tutorComplex", estTokens: 200, purpose: "smoke" }, (model) => {
       const r = streamText({ model, prompt: "In one sentence: what is Newton's second law?", maxRetries: 0 });
       return { stream: r.stream, usage: r.usage };
     });
     let text = "";
     for await (const p of res.parts) if (p.type === "text-delta") text += p.text;
     console.log(
-      `${role.padEnd(13)} ${res.model.padEnd(26)} first token ${String(res.firstTokenMs).padStart(5)} ms · total ${Date.now() - started} ms · fallbackUsed: ${res.fallbackUsed}\n  chain: ${chain.join(" → ")}\n  "${text.trim().slice(0, 100)}"`,
+      `${label.padEnd(30)} ${res.model.padEnd(30)} first token ${String(res.firstTokenMs).padStart(5)} ms · total ${Date.now() - started} ms · fallbackUsed: ${res.fallbackUsed}\n  "${text.trim().slice(0, 100)}"`,
     );
   } catch (e) {
-    console.log(`${role.padEnd(13)} FAILED: ${(e as Error).message}  (chain: ${chain.join(" → ")})`);
+    console.log(`${label.padEnd(30)} FAILED: ${(e as Error).message}`);
   }
-}
+};
+for (const id of chain) await ask({ MODEL_CHAIN: id }, id);
+await ask(env, "full chain");

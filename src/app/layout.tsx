@@ -4,6 +4,7 @@ import "@/server/env"; // validate env in every server runtime
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";
 
+import { EXTENSION_GUARD_SCRIPT } from "@/lib/extension-guard";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 // Typography: a textbook serif for headings, IBM Plex (an engineering family) for UI text and code.
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <script id="theme-init" dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script id="extension-guard" dangerouslySetInnerHTML={{ __html: EXTENSION_GUARD_SCRIPT }} />
       </head>
       <body>
         <a

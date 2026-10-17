@@ -66,16 +66,16 @@ export const serverShape = {
   // Models (IDs are config, never hardcoded in logic)
   EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
   EMBEDDING_DIM: positiveInt(768),
-  // Groq retired llama-3.1-8b-instant and llama-3.3-70b-versatile (checked 2026-10-17): gpt-oss everywhere.
-  MODEL_ROUTER: z.string().default("openai/gpt-oss-20b"),
-  MODEL_TUTOR_COMPLEX: z.string().default("openai/gpt-oss-120b"),
-  MODEL_TUTOR_SIMPLE: z.string().default("openai/gpt-oss-20b"),
-  MODEL_GUEST: z.string().default("openai/gpt-oss-20b"),
-  MODEL_SUMMARY: z.string().default("openai/gpt-oss-20b"),
-  MODEL_FALLBACKS: z.string().default("openai/gpt-oss-20b,openai/gpt-oss-120b"),
+  /**
+   * Ordered fallback chain for every model call: the first model that answers wins.
+   * Comma separated (ids contain "/"). Classifier models (llama-prompt-guard) are skipped.
+   */
+  MODEL_CHAIN: z
+    .string()
+    .default("qwen/qwen3.8-27b,openai/gpt-oss-120b,openai/gpt-oss-20b,openai/gpt-oss-safeguard-20b")
+    .refine((v) => v.split(/[\s,;]+/).some(Boolean), "must list at least one model id"),
 
   // Feature flags
-  ENABLE_PREVIEW_MODELS: bool,
   ENABLE_OCR: bool,
   ENABLE_PROMPT_GUARD: bool,
   ENABLE_DEV_PAGES: bool,

@@ -11,7 +11,7 @@ import { chainFor, type ModelConfig, type ModelRole, type ModelSpec } from "./re
 
 /**
  * Model router (IMPLEMENTATION.md Step 2.1):
- * - walks the role's chain (primary, then fallbacks), skipping models with no budget headroom;
+ * - walks MODEL_CHAIN in order, skipping models with no budget headroom;
  * - retries transient failures on the same model up to MAX_RETRIES times (honours `retry-after`);
  * - falls back to the next model ONLY before the first token; once text has streamed, an error
  *   ends the answer (with its partial text) instead of switching model mid-answer;
@@ -68,6 +68,8 @@ async function walk<T>(
   const sleep = deps.sleep ?? defaultSleep;
   const now = deps.now ?? Date.now;
   const chain = chainFor(opts.role, deps.config);
+  if (chain.length === 0)
+    throw new ModelError({ category: "model_unavailable", message: "MODEL_CHAIN has no chat models" });
   let lastError: ModelError | null = null;
   let tried = 0;
 
@@ -112,7 +114,7 @@ async function walk<T>(
         }
         if (err.category === "rate_limit") await markExhausted(deps.kv, spec.id, err.retryAfterMs, now());
         if (allowsFallback(err.category)) break; // next model
-        throw lastError; // 400 / 401 / 413 / unknown: no retry, no fallback
+        throw lastError; // 401 (bad key): no retry, no fallback
       }
     }
   }

@@ -1,7 +1,9 @@
 import "server-only";
 
+import { logger } from "@/server/log";
+
 /**
- * Model registry: which Groq model serves which role, and in what fallback order.
+ * Model registry: one ordered fallback chain (MODEL_CHAIN) shared by every role.
  * Model ids are configuration (env), never hardcoded in logic (techstack.md §3).
  */
 export type ModelRole = "router" | "tutorComplex" | "tutorSimple" | "guest" | "summary";
@@ -9,6 +11,8 @@ export type ModelRole = "router" | "tutorComplex" | "tutorSimple" | "guest" | "s
 export interface ModelSpec {
   id: string;
   provider: "groq";
+  /** "classifier" models (Llama Prompt Guard) only score text: they can't stream or answer. */
+  kind: "chat" | "classifier";
   contextWindow: number;
   maxOutput: number;
   supportsReasoning: boolean;
@@ -17,53 +21,46 @@ export interface ModelSpec {
   preview: boolean;
 }
 
-/** Known Groq models (Oct 2026). Unknown ids still work with conservative defaults. */
-const KNOWN: Record<string, Omit<ModelSpec, "id" | "provider">> = {
-  "openai/gpt-oss-120b": { contextWindow: 131_072, maxOutput: 32_766, supportsReasoning: true, supportsJsonSchema: true, preview: false },
-  "openai/gpt-oss-20b": { contextWindow: 131_072, maxOutput: 32_766, supportsReasoning: true, supportsJsonSchema: true, preview: false },
-  "llama-3.3-70b-versatile": { contextWindow: 131_072, maxOutput: 32_768, supportsReasoning: false, supportsJsonSchema: false, preview: false },
-  "llama-3.1-8b-instant": { contextWindow: 131_072, maxOutput: 8_192, supportsReasoning: false, supportsJsonSchema: false, preview: false },
-  "qwen/qwen3.8-27b": { contextWindow: 131_072, maxOutput: 40_960, supportsReasoning: true, supportsJsonSchema: false, preview: true },
+type Known = Omit<ModelSpec, "id" | "provider">;
+
+/** Known Groq models (probed on 2026-10-17). Unknown ids still work with conservative defaults. */
+const KNOWN: Record<string, Known> = {
+  "qwen/qwen3.8-27b": { kind: "chat", contextWindow: 131_072, maxOutput: 16_384, supportsReasoning: true, supportsJsonSchema: true, preview: true },
+  "openai/gpt-oss-120b": { kind: "chat", contextWindow: 131_072, maxOutput: 65_536, supportsReasoning: true, supportsJsonSchema: true, preview: false },
+  "openai/gpt-oss-20b": { kind: "chat", contextWindow: 131_072, maxOutput: 65_536, supportsReasoning: true, supportsJsonSchema: true, preview: false },
+  "openai/gpt-oss-safeguard-20b": { kind: "chat", contextWindow: 131_072, maxOutput: 65_536, supportsReasoning: true, supportsJsonSchema: true, preview: false },
+  "meta-llama/llama-prompt-guard-2-86m": { kind: "classifier", contextWindow: 512, maxOutput: 512, supportsReasoning: false, supportsJsonSchema: false, preview: false },
+  "meta-llama/llama-prompt-guard-2-22m": { kind: "classifier", contextWindow: 512, maxOutput: 512, supportsReasoning: false, supportsJsonSchema: false, preview: false },
 };
 
+const UNKNOWN: Known = { kind: "chat", contextWindow: 32_768, maxOutput: 8_192, supportsReasoning: false, supportsJsonSchema: false, preview: false };
+
 export function specFor(id: string): ModelSpec {
-  const known = KNOWN[id];
-  return {
-    id,
-    provider: "groq",
-    ...(known ?? { contextWindow: 32_768, maxOutput: 8_192, supportsReasoning: false, supportsJsonSchema: false, preview: false }),
-  };
+  return { id, provider: "groq", ...(KNOWN[id] ?? UNKNOWN) };
 }
 
 export interface ModelConfig {
-  MODEL_ROUTER: string;
-  MODEL_TUTOR_COMPLEX: string;
-  MODEL_TUTOR_SIMPLE: string;
-  MODEL_GUEST: string;
-  MODEL_SUMMARY: string;
-  MODEL_FALLBACKS: string;
-  ENABLE_PREVIEW_MODELS: boolean;
+  /** Ordered model ids, first = preferred. Separated by commas, semicolons, spaces or new lines. */
+  MODEL_CHAIN: string;
 }
 
-const PRIMARY: Record<ModelRole, keyof ModelConfig> = {
-  router: "MODEL_ROUTER",
-  tutorComplex: "MODEL_TUTOR_COMPLEX",
-  tutorSimple: "MODEL_TUTOR_SIMPLE",
-  guest: "MODEL_GUEST",
-  summary: "MODEL_SUMMARY",
-};
+/** Ids contain "/" (e.g. "openai/gpt-oss-20b"), so "/" can't separate them. */
+export function parseModelChain(raw: string): string[] {
+  return [...new Set(raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+const warned = new Set<string>();
 
 /**
- * Primary model for the role, then MODEL_FALLBACKS in order; de-duplicated; preview models only
- * when ENABLE_PREVIEW_MODELS is on. (The primary is kept even if it is a preview model: choosing
- * it explicitly is an opt-in.)
+ * The chat models of MODEL_CHAIN, in order, de-duplicated. Classifier models are skipped (logged
+ * once): they would fail every chat call. Every role walks the same chain.
  */
-export function chainFor(role: ModelRole, cfg: ModelConfig): ModelSpec[] {
-  const primary = String(cfg[PRIMARY[role]]).trim();
-  const fallbacks = cfg.MODEL_FALLBACKS.split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .filter((id) => cfg.ENABLE_PREVIEW_MODELS || !specFor(id).preview);
-  const ids = [...new Set([primary, ...fallbacks].filter(Boolean))];
-  return ids.map(specFor);
+export function chainFor(_role: ModelRole, cfg: ModelConfig): ModelSpec[] {
+  const specs = parseModelChain(cfg.MODEL_CHAIN).map(specFor);
+  for (const s of specs)
+    if (s.kind !== "chat" && !warned.has(s.id)) {
+      warned.add(s.id);
+      logger.warn("model.chain_skip", { model: s.id, reason: "classifier models can't answer chat messages" });
+    }
+  return specs.filter((s) => s.kind === "chat");
 }

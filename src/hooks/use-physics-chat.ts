@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { applyEvent } from "@/lib/chat/apply-event";
+import { REVEAL_TICK_MS, revealStep, snapToWord, textLength, truncateText } from "@/lib/chat/reveal";
 import type { ChatTransport, ThreadRef } from "@/lib/chat/transport";
-import type { ChatMessage, Limit } from "@/shared/ui-message";
+import { messageText, type ChatMessage, type Limit } from "@/shared/ui-message";
 
 export type ChatStatus = "ready" | "submitted" | "streaming" | "error";
-
-/** UI renders at most every ~50 ms while streaming (STREAMING.md §6). */
-export const RENDER_THROTTLE_MS = 50;
 
 let idCounter = 0;
 const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
@@ -36,19 +34,66 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
   const [completedId, setCompletedId] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  /** Everything received so far for the answer being streamed. */
   const pendingRef = useRef<ChatMessage | null>(null);
-  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** How many of its text characters are on screen (smooth reveal, lib/chat/reveal.ts). */
+  const shownRef = useRef(0);
+  const lastTickRef = useRef(0);
+  const tickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drainedRef = useRef<(() => void) | null>(null);
+  /** Lets the reveal loop reschedule itself from inside `tick`. */
+  const tickRef = useRef<() => void>(() => {});
+  const later = () => setTimeout(() => tickRef.current(), REVEAL_TICK_MS);
 
-  const flush = useCallback(() => {
-    flushTimer.current = null;
-    const pending = pendingRef.current;
-    if (!pending) return;
-    setMessages((prev) => prev.map((m) => (m.id === pending.id ? pending : m)));
+  /** Show the next slice of received text; reschedules itself until everything received is shown. */
+  const tick = useCallback(() => {
+    tickTimer.current = null;
+    const full = pendingRef.current;
+    if (!full) return;
+    const now = Date.now();
+    const total = textLength(full);
+    const dt = Math.min(now - lastTickRef.current, 200);
+    lastTickRef.current = now;
+    if (shownRef.current < total)
+      shownRef.current = snapToWord(messageText(full), shownRef.current + revealStep(total - shownRef.current, dt));
+    const caughtUp = shownRef.current >= total;
+    // Until the text has caught up the answer is still "streaming" (cursor on, actions hidden).
+    const shown = caughtUp ? full : { ...truncateText(full, shownRef.current), status: "streaming" as const };
+    setMessages((prev) => prev.map((m) => (m.id === full.id ? shown : m)));
+    if (!caughtUp) tickTimer.current = later();
+    else drainedRef.current?.();
   }, []);
+  useEffect(() => {
+    tickRef.current = tick;
+  }, [tick]);
 
   const scheduleFlush = useCallback(() => {
-    if (flushTimer.current === null) flushTimer.current = setTimeout(flush, RENDER_THROTTLE_MS);
-  }, [flush]);
+    if (tickTimer.current === null) {
+      lastTickRef.current = Date.now() - REVEAL_TICK_MS;
+      tickTimer.current = later();
+    }
+  }, []);
+
+  /** Show everything received right away (stop, errors, unmount). */
+  const revealAll = useCallback(() => {
+    shownRef.current = Number.MAX_SAFE_INTEGER;
+    if (tickTimer.current) clearTimeout(tickTimer.current);
+    tick();
+  }, [tick]);
+
+  /** Resolves once the received text is fully on screen. */
+  const drain = useCallback(
+    (signal: AbortSignal) =>
+      new Promise<void>((resolve) => {
+        if (!pendingRef.current || shownRef.current >= textLength(pendingRef.current)) return resolve();
+        drainedRef.current = resolve;
+        signal.addEventListener("abort", revealAll, { once: true });
+        scheduleFlush();
+      }).finally(() => {
+        drainedRef.current = null;
+      }),
+    [revealAll, scheduleFlush],
+  );
 
   const run = useCallback(
     async (userMessage: ChatMessage, history: ChatMessage[], regenerate = false) => {
@@ -60,6 +105,7 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
         meta: { startedAt: Date.now() },
       };
       pendingRef.current = assistant;
+      shownRef.current = 0;
       setMessages([...history, userMessage, assistant]);
       setStatus("submitted");
       setCompletedId(null);
@@ -90,7 +136,11 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
           }
           scheduleFlush();
         }
-        const finalStatus = controller.signal.aborted
+        // The server is done; let the reveal catch up (Stop during this shows the rest at once:
+        // the full answer is already saved, so the screen must match it).
+        const endedNormally = !controller.signal.aborted;
+        if (endedNormally && pendingRef.current!.status !== "error") await drain(controller.signal);
+        const finalStatus = !endedNormally
           ? "cancelled"
           : pendingRef.current!.status === "error"
             ? "error"
@@ -103,13 +153,12 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
         pendingRef.current = { ...pendingRef.current!, status: aborted ? "cancelled" : "error" };
         setStatus(aborted ? "ready" : "error");
       } finally {
-        if (flushTimer.current) clearTimeout(flushTimer.current);
-        flush();
+        revealAll();
         pendingRef.current = null;
         abortRef.current = null;
       }
     },
-    [transport, scheduleFlush, flush],
+    [transport, scheduleFlush, drain, revealAll],
   );
 
   const send = useCallback(
@@ -151,7 +200,13 @@ export function usePhysicsChat(transport: ChatTransport, options: PhysicsChatOpt
     setThread(null);
   }, []);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (tickTimer.current) clearTimeout(tickTimer.current);
+    },
+    [],
+  );
 
   const limit = useMemo<Limit | null>(() => {
     for (let i = messages.length - 1; i >= 0; i--) {

@@ -61,7 +61,9 @@ export function parseRetryAfter(value: string | null | undefined, now = Date.now
 
 function statusCategory(status: number): ErrorCategory {
   if (status === 429) return "rate_limit";
-  if (status === 401 || status === 403) return "auth";
+  if (status === 401) return "auth";
+  // 403 on Groq is per model (blocked or not enabled for this org): the next model may work.
+  if (status === 403) return "model_unavailable";
   if (status === 413) return "context_too_large";
   if (status === 404) return "model_unavailable";
   if (status === 408) return "timeout";
@@ -116,5 +118,9 @@ export function classifyError(err: unknown): ModelError {
 export const isTransient = (c: ErrorCategory) =>
   c === "rate_limit" || c === "provider_5xx" || c === "network" || c === "timeout";
 
-/** Worth trying the next model in the chain (before the first token only)? */
-export const allowsFallback = (c: ErrorCategory) => isTransient(c) || c === "model_unavailable";
+/**
+ * Worth trying the next model in the chain (before the first token only)? Anything except a bad
+ * API key (same for every model), a user abort, or no budget: a 400 is often model specific
+ * (unsupported parameter, smaller context, retired id), so the next model may still answer.
+ */
+export const allowsFallback = (c: ErrorCategory) => c !== "auth" && c !== "aborted" && c !== "capacity";
