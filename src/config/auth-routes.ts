@@ -11,8 +11,11 @@ export function isProtectedPage(pathname: string) {
   return PROTECTED_PAGES.some((b) => under(pathname, b));
 }
 
+/** Authenticated by the handler itself (internal job secret or the owner's session). */
+const SELF_AUTHENTICATED_API = /^\/api\/documents\/[^/]+\/process$/;
+
 export function isProtectedApi(pathname: string) {
-  return PROTECTED_API.some((b) => under(pathname, b));
+  return PROTECTED_API.some((b) => under(pathname, b)) && !SELF_AUTHENTICATED_API.test(pathname);
 }
 
 export function isProtectedPath(pathname: string) {

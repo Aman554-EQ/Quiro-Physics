@@ -60,12 +60,21 @@ export const serverShape = {
   LLM_MODE: z.enum(["groq", "mock"]).optional(),
   /** ms per token for the mock tutor (e2e uses 1). */
   MOCK_LLM_DELAY_MS: z.coerce.number().int().min(0).default(20),
+  /** E2E only: ms per passage for the offline hash embeddings, so live progress can be seen. Never on Vercel. */
+  MOCK_EMBED_DELAY_MS: z.coerce.number().int().min(0).max(5_000).default(0),
   /** E2E only: sign in through a signed test cookie instead of Clerk. Refused on Vercel. */
   E2E_TEST_AUTH: bool,
 
   // Models (IDs are config, never hardcoded in logic)
   EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
-  EMBEDDING_DIM: positiveInt(768),
+  /** The chunk column is halfvec(768): other sizes need a migration. */
+  EMBEDDING_DIM: z.coerce.number().int().pipe(z.literal(768)).default(768),
+  /** "gemini" needs GOOGLE_GENERATIVE_AI_API_KEY; "hash" = offline lexical embeddings. Default: gemini if a key is set. */
+  EMBEDDINGS_MODE: z.enum(["gemini", "hash"]).optional(),
+  /** Gemini free tier: 100 embedding requests a minute, one per passage. Ingestion paces itself at this rate, leaving room for chat questions. */
+  EMBEDDING_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(95),
+  /** Folder for uploaded PDFs when BLOB_READ_WRITE_TOKEN is not set (local dev, tests). Never on Vercel. */
+  LOCAL_BLOB_DIR: z.string().min(1).optional(),
   /**
    * Ordered fallback chain for every model call: the first model that answers wins.
    * Comma separated (ids contain "/"). Classifier models (llama-prompt-guard) are skipped.
