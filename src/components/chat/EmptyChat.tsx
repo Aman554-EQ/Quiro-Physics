@@ -46,7 +46,7 @@ export function EmptyChat({ onPick }: { onPick: (q: string) => void }) {
         })}
       </ul>
       <p className="text-muted text-xs">
-        Guest mode · 6 follow-ups per question · Preview build with a demo tutor
+        Free to use · Step-by-step answers with equations, units and diagrams
       </p>
     </div>
   );

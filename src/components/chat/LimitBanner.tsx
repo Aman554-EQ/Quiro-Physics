@@ -18,25 +18,19 @@ function at(iso?: string) {
 function explain(limit: Limit, signedIn: boolean) {
   const exhausted = limit.remaining === 0;
   switch (limit.kind) {
+    // Guests never see counts: the limit only shows up as an invitation to sign in.
     case "guest_turns":
-      return exhausted ? (
+      return (
         <>
-          <strong>You&apos;ve used all {limit.limit} follow-ups for this question.</strong> Guests get {limit.limit}{" "}
-          turns per question so the free tutor stays available for everyone.
-        </>
-      ) : (
-        <>
-          <strong>
-            {limit.remaining} of {limit.limit}
-          </strong>{" "}
-          follow-ups left for this question.
+          <strong>Sign in to continue this conversation.</strong> A free account keeps every chat and lets the tutor
+          answer from your own textbooks.
         </>
       );
     case "guest_daily":
       return (
         <>
-          <strong>You&apos;ve started {limit.limit} new questions today.</strong> That&apos;s the guest limit for one day
-          {at(limit.resetAt) ? `; it resets ${at(limit.resetAt)}` : ""}. Sign in to keep going.
+          <strong>Sign in to keep asking.</strong> A free account keeps every chat and lets the tutor answer from your
+          own textbooks.
         </>
       );
     case "user_daily":
@@ -67,7 +61,8 @@ export function LimitBanner({
   signedIn?: boolean;
 }) {
   const exhausted = limit.remaining === 0;
-  const canStartNew = limit.kind === "guest_turns" || limit.kind === "rate";
+  const guestGate = limit.kind === "guest_turns" || limit.kind === "guest_daily";
+  const canStartNew = limit.kind === "rate";
   return (
     <div
       role="status"
@@ -93,6 +88,11 @@ export function LimitBanner({
             className={cn(buttonVariants({ variant: "primary", size: "sm" }), "min-h-11 sm:min-h-9")}
           >
             <LogIn className="size-4" aria-hidden /> Sign in to continue
+          </Link>
+        )}
+        {!signedIn && guestGate && (
+          <Link href="/sign-up" className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "min-h-11 sm:min-h-9")}>
+            Create a free account
           </Link>
         )}
       </div>

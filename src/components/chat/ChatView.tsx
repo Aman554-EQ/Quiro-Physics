@@ -21,6 +21,7 @@ import { EmptyChat } from "./EmptyChat";
 import { GuestImportPrompt, rememberGuestThread } from "./GuestImportPrompt";
 import { LimitBanner } from "./LimitBanner";
 import { MessageList } from "./MessageList";
+import { SignInDialog } from "./SignInDialog";
 import { SourcesList } from "./Sources";
 
 interface ChatViewProps {
@@ -138,14 +139,17 @@ export function ChatView({
     return () => clearTimeout(t);
   }, [chat.completedId, savedThread]);
 
-  const turnsLeft = chat.limit?.kind === "guest_turns" ? chat.limit.remaining : null;
+  // Guests see no limits while they still have turns: the server enforces them, and reaching one
+  // opens the sign-in dialog (once per limit; "Not now" closes it, the banner stays).
   const footer = signedIn
     ? chat.limit?.kind === "user_daily" && chat.limit.remaining <= 10
       ? `Saved to your history · ${chat.limit.remaining} messages left today`
       : "Saved to your history"
-    : turnsLeft === null
-      ? "Guest mode · 6 follow-ups per question"
-      : `Guest mode · ${turnsLeft} of ${chat.limit!.limit} follow-ups left`;
+    : "Guest mode · Sign in any time to save your chats";
+  const guestGate = !signedIn && exhausted && (chat.limit?.kind === "guest_turns" || chat.limit?.kind === "guest_daily");
+  const gateKey = guestGate ? `${chat.limit!.kind}:${chat.thread?.id ?? ""}` : null;
+  const [dismissedGate, setDismissedGate] = useState<string | null>(null);
+  const showBanner = chat.limit !== null && (exhausted || (signedIn && chat.limit.remaining <= 1) || chat.limit.kind === "rate");
 
   return (
     <div className="flex h-full min-h-0 w-full">
@@ -192,9 +196,8 @@ export function ChatView({
               <DocumentSelector value={documentIds} onChange={chooseDocuments} />
             </div>
           )}
-          {chat.limit && (exhausted || chat.limit.remaining <= 1) && (
-            <LimitBanner limit={chat.limit} onNewQuestion={newQuestion} signedIn={signedIn} />
-          )}
+          {chat.limit && showBanner && <LimitBanner limit={chat.limit} onNewQuestion={newQuestion} signedIn={signedIn} />}
+          <SignInDialog open={gateKey !== null && dismissedGate !== gateKey} onOpenChange={(o) => !o && setDismissedGate(gateKey)} />
           <Composer
             ref={composerRef}
             value={draft}
@@ -203,7 +206,7 @@ export function ChatView({
             onStop={chat.stop}
             busy={chat.busy}
             disabled={exhausted}
-            disabledReason={signedIn ? "You've reached today's message limit" : "Start a new question or sign in"}
+            disabledReason={signedIn ? "You've reached today's message limit" : "Sign in to continue"}
             footer={footer}
           />
         </div>

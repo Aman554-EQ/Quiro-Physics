@@ -73,7 +73,7 @@ export async function openGuestTurn(
     if (used >= maxTurns)
       throw new LimitError(
         "GUEST_TURN_LIMIT",
-        `Guests can ask ${maxTurns} questions in one thread. Start a new question, or sign in to keep going.`,
+        "Sign in to continue this conversation. A free account keeps every chat.",
       );
     const turn = await kv.incr(turnsKey(opts.threadId!));
     await kv.expire(turnsKey(opts.threadId!), THREAD_TTL_S);
@@ -84,7 +84,7 @@ export async function openGuestTurn(
   if (used >= env.GUEST_MAX_THREADS_PER_DAY)
     throw new LimitError(
       "GUEST_DAILY_LIMIT",
-      `Guests can start ${env.GUEST_MAX_THREADS_PER_DAY} new questions a day. Sign in to keep going, or come back tomorrow.`,
+      "Sign in to keep asking. A free account keeps every chat.",
       resetAt,
     );
   const day = utcDay(now);
