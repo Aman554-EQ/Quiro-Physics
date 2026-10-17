@@ -19,9 +19,15 @@ import { runJob } from "./job-runner";
  */
 const CONTINUE_DELAY_MS = 1_000;
 
-function baseUrl() {
+/**
+ * Where the next slice is sent. The per-deployment VERCEL_URL sits behind Vercel's Deployment
+ * Protection by default (the self-call would get 401), so production uses its public domain
+ * (VERCEL_PROJECT_PRODUCTION_URL) when NEXT_PUBLIC_APP_URL isn't set.
+ */
+export function baseUrl(e: Record<string, string | undefined> = process.env) {
   if (env.NEXT_PUBLIC_APP_URL) return env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (e.VERCEL_ENV === "production" && e.VERCEL_PROJECT_PRODUCTION_URL) return `https://${e.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (e.VERCEL_URL) return `https://${e.VERCEL_URL}`;
   return null;
 }
 
