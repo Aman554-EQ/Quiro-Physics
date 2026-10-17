@@ -5,6 +5,7 @@ import { route } from "@/server/http";
 import { getKV } from "@/server/kv";
 import { clientIp, ipHash, resolveGuest } from "@/server/limits/guest-identity";
 import { threadsToday } from "@/server/limits/guest-threads";
+import { uploadUsage } from "@/server/limits/quotas";
 import { dailyMessageUsage } from "@/server/limits/user-limits";
 import type { LimitsResponse } from "@/shared/chat-api";
 
@@ -14,14 +15,9 @@ export const runtime = "nodejs";
 export const GET = route(async (req: Request) => {
   const user = await getOptionalUser();
   if (user) {
-    const messages = await dailyMessageUsage(await getDb(), user.userId);
-    const body: LimitsResponse = {
-      kind: "user",
-      messages,
-      // PDF quotas go live in Phase 3.
-      uploads: { used: 0, limit: env.UPLOAD_QUOTA_PER_WEEK, nextSlotAt: null },
-      active: { used: 0, limit: env.MAX_ACTIVE_DOCUMENTS },
-    };
+    const db = await getDb();
+    const [messages, quotas] = await Promise.all([dailyMessageUsage(db, user.userId), uploadUsage(db, user.userId)]);
+    const body: LimitsResponse = { kind: "user", messages, ...quotas };
     return Response.json(body);
   }
   const { guestId } = resolveGuest(req);
