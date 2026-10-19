@@ -153,11 +153,7 @@ src/
 drizzle/                 SQL migrations
 ```
 
-## Known limitations
-- Groq's free tier allows only a few answers at the same time; the model chain spreads the load.
-- Scanned PDFs without a text layer can't be searched (OCR is off by default).
-- Uploaded PDFs are deleted after indexing by default (`RETAIN_PDF=false`) to stay within free Blob storage.
-- AI answers can contain mistakes. Check important results against your course material.
+
 
 ## License
 
